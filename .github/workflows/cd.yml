@@ -1,0 +1,54 @@
+name: CD — Deploy to Production
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+
+      - name: Update image tags
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          sed -i "s|:latest|:${TAG}|g" k8s/deployment.yaml
+
+      - name: Apply Kubernetes manifests
+        run: |
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/configmap.yaml
+          kubectl apply -f k8s/deployment.yaml
+          kubectl apply -f k8s/service.yaml
+          kubectl apply -f k8s/hpa.yaml
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/btos-api -n btos --timeout=5m
+          kubectl rollout status deployment/btos-worker -n btos --timeout=5m
+
+      - name: Run smoke tests
+        run: |
+          API_URL=$(kubectl get ingress btos-ingress -n btos -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          curl -f "http://${API_URL}/health/live" || exit 1
+
+      - name: Notify deployment
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "Deployment ${TAG} ${STATUS}"

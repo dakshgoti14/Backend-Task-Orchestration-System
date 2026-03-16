@@ -1,0 +1,105 @@
+---
+# ─── API Deployment ─────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: btos-api
+  namespace: btos
+  labels:
+    app: btos-api
+    component: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: btos-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: btos-api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "3000"
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: btos-api
+          image: ghcr.io/dakshgoti14/backend-task-orchestration-system:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: btos-config
+            - secretRef:
+                name: btos-secrets
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 5"]
+---
+# ─── Worker Deployment ──────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: btos-worker
+  namespace: btos
+  labels:
+    app: btos-worker
+    component: worker
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: btos-worker
+  template:
+    metadata:
+      labels:
+        app: btos-worker
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: btos-worker
+          image: ghcr.io/dakshgoti14/backend-task-orchestration-system:latest
+          imagePullPolicy: Always
+          command: ["node", "dist/workers/WorkerNode.js"]
+          envFrom:
+            - configMapRef:
+                name: btos-config
+            - secretRef:
+                name: btos-secrets
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"

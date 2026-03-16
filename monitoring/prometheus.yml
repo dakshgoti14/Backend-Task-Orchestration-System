@@ -1,0 +1,29 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: btos-local
+    env: development
+
+rule_files:
+  - "alert.rules.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+scrape_configs:
+  - job_name: btos-api
+    static_configs:
+      - targets:
+          - localhost:3000
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  - job_name: btos-worker
+    static_configs:
+      - targets:
+          - localhost:9091  # worker metrics port (if separate)
+    metrics_path: /metrics
+    scrape_interval: 10s

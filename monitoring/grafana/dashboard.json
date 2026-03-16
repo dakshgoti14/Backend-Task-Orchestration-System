@@ -1,0 +1,82 @@
+{
+  "title": "Backend Task Orchestration System",
+  "uid": "btos-main",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Jobs Submitted/min",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 8, "h": 6 },
+      "targets": [{ "expr": "rate(btos_jobs_submitted_total[1m]) * 60", "legendFormat": "Submitted/min" }]
+    },
+    {
+      "id": 2,
+      "title": "Job Success vs Failure Rate",
+      "type": "timeseries",
+      "gridPos": { "x": 8, "y": 0, "w": 8, "h": 6 },
+      "targets": [
+        { "expr": "rate(btos_jobs_completed_total[1m]) * 60", "legendFormat": "Success/min" },
+        { "expr": "rate(btos_jobs_failed_total[1m]) * 60", "legendFormat": "Failed/min" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Queue Depth",
+      "type": "gauge",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 6 },
+      "targets": [{ "expr": "btos_queue_depth{queue=\"main\"}", "legendFormat": "Queue Depth" }]
+    },
+    {
+      "id": 4,
+      "title": "DLQ Entries",
+      "type": "stat",
+      "gridPos": { "x": 20, "y": 0, "w": 4, "h": 6 },
+      "targets": [{ "expr": "btos_dlq_entries_total", "legendFormat": "DLQ Total" }]
+    },
+    {
+      "id": 5,
+      "title": "Worker Status",
+      "type": "bargauge",
+      "gridPos": { "x": 0, "y": 6, "w": 8, "h": 6 },
+      "targets": [
+        { "expr": "btos_workers_total{status=\"ONLINE\"}", "legendFormat": "Online" },
+        { "expr": "btos_workers_total{status=\"BUSY\"}", "legendFormat": "Busy" },
+        { "expr": "btos_workers_total{status=\"LOST\"}", "legendFormat": "Lost" }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Job Duration Percentiles",
+      "type": "timeseries",
+      "gridPos": { "x": 8, "y": 6, "w": 16, "h": 6 },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, rate(btos_job_duration_seconds_bucket[5m]))", "legendFormat": "P50" },
+        { "expr": "histogram_quantile(0.95, rate(btos_job_duration_seconds_bucket[5m]))", "legendFormat": "P95" },
+        { "expr": "histogram_quantile(0.99, rate(btos_job_duration_seconds_bucket[5m]))", "legendFormat": "P99" }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "HTTP Request Rate by Status",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 6 },
+      "targets": [
+        { "expr": "rate(btos_http_requests_total{status_code=~\"2..\"}[1m]) * 60", "legendFormat": "2xx" },
+        { "expr": "rate(btos_http_requests_total{status_code=~\"4..\"}[1m]) * 60", "legendFormat": "4xx" },
+        { "expr": "rate(btos_http_requests_total{status_code=~\"5..\"}[1m]) * 60", "legendFormat": "5xx" }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "API Latency (P95)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 6 },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, rate(btos_http_request_duration_seconds_bucket[5m]))", "legendFormat": "P95 Latency" }
+      ]
+    }
+  ]
+}

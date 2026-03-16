@@ -1,0 +1,71 @@
+groups:
+  - name: btos.job_rules
+    rules:
+      - alert: HighJobFailureRate
+        expr: |
+          rate(btos_jobs_failed_total[5m]) /
+          (rate(btos_jobs_completed_total[5m]) + rate(btos_jobs_failed_total[5m]) + 0.001) > 0.10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High job failure rate detected"
+          description: "More than 10% of jobs are failing in the last 5 minutes."
+
+      - alert: DLQThresholdExceeded
+        expr: btos_dlq_entries_total > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Dead letter queue has too many entries"
+          description: "DLQ has more than 50 permanently failed jobs."
+
+      - alert: QueueBacklogTooLarge
+        expr: btos_queue_depth{queue="main"} > 5000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Main job queue is backed up"
+          description: "More than 5000 jobs are waiting in the main queue."
+
+      - alert: NoActiveWorkers
+        expr: sum(btos_workers_total{status="ONLINE"}) + sum(btos_workers_total{status="BUSY"}) == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No active workers"
+          description: "All worker nodes are offline or lost."
+
+      - alert: LongRunningJobsDetected
+        expr: |
+          histogram_quantile(0.99, rate(btos_job_duration_seconds_bucket[5m])) > 120
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P99 job execution exceeds 120s"
+          description: "99th percentile job duration is above 2 minutes."
+
+  - name: btos.api_rules
+    rules:
+      - alert: HighAPIErrorRate
+        expr: |
+          rate(btos_http_requests_total{status_code=~"5.."}[5m]) /
+          rate(btos_http_requests_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API 5xx error rate above 5%"
+
+      - alert: APIHighLatency
+        expr: |
+          histogram_quantile(0.95, rate(btos_http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 API latency above 2 seconds"

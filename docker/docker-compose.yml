@@ -1,0 +1,132 @@
+version: '3.9'
+
+services:
+  # ─── Infrastructure ──────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: btos-postgres
+    environment:
+      POSTGRES_DB: task_orchestration
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - btos
+
+  redis:
+    image: redis:7-alpine
+    container_name: btos-redis
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - btos
+
+  # ─── Application ─────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: btos-api
+    env_file: ../.env
+    environment:
+      NODE_ENV: development
+      DB_HOST: postgres
+      REDIS_HOST: redis
+      PORT: 3000
+    ports:
+      - "3000:3000"
+      - "9090:9090"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../logs:/app/logs
+    networks:
+      - btos
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: btos-worker
+    command: ["node", "dist/workers/WorkerNode.js"]
+    env_file: ../.env
+    environment:
+      NODE_ENV: development
+      DB_HOST: postgres
+      REDIS_HOST: redis
+      WORKER_CONCURRENCY: 10
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      - btos
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+
+  # ─── Monitoring ───────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: btos-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9091:9090"
+    volumes:
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../monitoring/alert.rules.yml:/etc/prometheus/alert.rules.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - btos
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: btos-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ../monitoring/grafana:/etc/grafana/provisioning/dashboards
+    networks:
+      - btos
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  btos:
+    driver: bridge
